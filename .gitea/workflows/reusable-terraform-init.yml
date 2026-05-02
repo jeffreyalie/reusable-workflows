@@ -1,0 +1,76 @@
+name: "Reusable Terraform Init"
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Environment name (e.g., dev, prod)"
+        required: true
+        type: string
+      vm_name:
+        description: "VM name for state key (e.g., dev01, prod01)"
+        required: true
+        type: string
+      terraform_version:
+        description: "Optional Terraform version (defaults to latest)"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      MINIO_ENDPOINT:
+        description: "MinIO endpoint for Terraform backend"
+        required: true
+      MINIO_ACCESS_KEY:
+        description: "MinIO access key"
+        required: true
+      MINIO_SECRET_KEY:
+        description: "MinIO secret key"
+        required: true
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+    outputs:
+      working_dir: ${{ steps.vars.outputs.working_dir }}
+      tfvars_file: ${{ steps.vars.outputs.tfvars_file }}
+      state_key: ${{ steps.vars.outputs.state_key }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Set Variables
+        id: vars
+        run: |
+          ENV=$(echo "${{ inputs.environment }}" | tr '[:upper:]' '[:lower:]')
+          VM="${{ inputs.vm_name }}"
+
+          if [ "$ENV" != "dev" ] && [ "$ENV" != "prod" ]; then
+            echo "::error:: Invalid environment: $ENV (allowed: dev, prod)"
+            exit 1
+          fi
+
+          echo "env=$ENV" >> $GITHUB_OUTPUT
+          echo "vm_name=$VM" >> $GITHUB_OUTPUT
+          echo "working_dir=terraform/env/${ENV}" >> $GITHUB_OUTPUT
+          echo "tfvars_file=${VM}.tfvars" >> $GITHUB_OUTPUT
+          echo "state_key=state/${ENV}/${VM}/terraform.tfstate" >> $GITHUB_OUTPUT
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Terraform Init
+        working-directory: ${{ steps.vars.outputs.working_dir }}
+        run: |
+          terraform init \
+            -backend-config="endpoint=${{ secrets.MINIO_ENDPOINT }}" \
+            -backend-config="bucket=terraform-state" \
+            -backend-config="key=${{ steps.vars.outputs.state_key }}" \
+            -backend-config="region=us-east-1" \
+            -backend-config="access_key=${{ secrets.MINIO_ACCESS_KEY }}" \
+            -backend-config="secret_key=${{ secrets.MINIO_SECRET_KEY }}" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="skip_requesting_account_id=true" \
+            -backend-config="force_path_style=true"

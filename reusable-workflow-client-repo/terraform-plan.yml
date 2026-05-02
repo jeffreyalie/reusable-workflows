@@ -1,0 +1,30 @@
+name: "Terraform Plan"
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment (e.g dev/prod ) must match folder name, e.g. terraform/env/dev or terraform/env/prod)"
+        required: true
+        type: string
+
+      vm_name:
+        description: "VM name ( e.g. dev01 / prod01 ) must match tfvars file, e.g. dev01.tfvars / prod01.tfvars"
+        required: true
+
+jobs:
+  plan:
+    uses: Infra/reusable-workflows/.gitea/workflows/reusable-terraform-plan.yml@main
+    with:
+      environment: ${{ github.event.inputs.environment }}
+      vm_name: ${{ github.event.inputs.vm_name }}
+    secrets:
+      MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+      MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+      MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+      LXD_ADDRESS: ${{ secrets.LXD_ADDRESS }}
+      ANSIBLE_SSH_PUBLIC_KEY: ${{ secrets.ANSIBLE_SSH_PUBLIC_KEY }}
+      # LXD_TRUST_PASSWORD: ${{ secrets.LXD_TRUST_PASSWORD }} # -- enable if using password-based trust instead of client certs
+      LXD_CLIENT_CERT: ${{ secrets.LXD_CLIENT_CERT }} # -- disable if using password-based trust instead of client certs
+      LXD_CLIENT_KEY: ${{ secrets.LXD_CLIENT_KEY }} # -- disable if using password-based trust instead of client certs
+            

@@ -1,0 +1,38 @@
+name: "Reusable Ansible Check"
+
+on:
+  workflow_call:
+    inputs:
+      ansible_playbook_path:
+        description: "Path to Ansible playbook (e.g., ansible/playbook.yml)"
+        required: false
+        type: string
+        default: "ansible/playbook.yml"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible ansible-lint git
+
+      - name: Install Ansible Roles
+        run: |
+          if [ -f ansible/requirements.yml ]; then
+            ansible-galaxy role install --force -r ansible/requirements.yml
+          else
+            echo "No requirements.yml found, skipping..."
+          fi
+
+      - name: Run Ansible Lint
+        run: |
+          ansible-lint ${{ inputs.ansible_playbook_path }} --force-color
+
+      - name: Ansible Syntax Check
+        run: |
+          ansible-playbook ${{ inputs.ansible_playbook_path }} --syntax-check

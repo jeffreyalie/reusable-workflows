@@ -1,0 +1,11 @@
+name: "Terraform Check"
+
+on:
+  pull_request: # This will run on PRs to validate Terraform code before merging
+  workflow_dispatch:  # This enables the "Run workflow" button in the UI
+
+jobs:
+  check:
+    uses: Infra/reusable-workflows/.gitea/workflows/reusable-terraform-check.yml@main
+    with:
+      terraform_dir: "terraform"

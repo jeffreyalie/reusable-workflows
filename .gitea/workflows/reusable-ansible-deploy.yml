@@ -1,0 +1,148 @@
+name: "Reusable Ansible Deploy"
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Environment name (e.g., dev, prod)"
+        required: true
+        type: string
+      vm_name:
+        description: "VM name (e.g., dev01, prod01)"
+        required: true
+        type: string
+      ansible_playbook_path:
+        description: "Path to Ansible playbook (e.g., ansible/playbook.yml)"
+        required: false
+        type: string
+        default: "ansible/playbook.yml"
+      terraform_version:
+        description: "Optional Terraform version (defaults to latest)"
+        required: false
+        type: string
+        default: ""
+      ssh_wait_timeout_seconds:
+        description: "Seconds to wait for SSH to be ready (default 200)"
+        required: false
+        type: number
+        default: 200
+    secrets:
+      MINIO_ENDPOINT:
+        required: true
+      MINIO_ACCESS_KEY:
+        required: true
+      MINIO_SECRET_KEY:
+        required: true
+      LXD_ADDRESS:
+        required: true
+      ANSIBLE_SSH_PUBLIC_KEY:
+        required: true
+      ANSIBLE_SSH_PRIVATE_KEY:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Validate Environment
+        run: |
+          ENV="${{ inputs.environment }}"
+          if [ "$ENV" != "dev" ] && [ "$ENV" != "prod" ]; then
+            echo "::error:: Invalid environment: $ENV (must be dev or prod)"
+            exit 1
+          fi
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible netcat-openbsd git
+
+      - name: Install Ansible Roles
+        run: |
+          if [ -f ansible/requirements.yml ]; then
+            echo "requirements.yml found, installing roles..."
+            ansible-galaxy role install --force -r ansible/requirements.yml
+          else
+            echo "No requirements.yml found, skipping..."
+          fi
+          
+      - name: Set Variables
+        id: vars
+        run: |
+          ENV="${{ inputs.environment }}"
+          VM="${{ inputs.vm_name }}"
+
+          echo "env=$ENV" >> $GITHUB_OUTPUT
+          echo "vm_name=$VM" >> $GITHUB_OUTPUT
+          echo "working_dir=terraform/env/${ENV}" >> $GITHUB_OUTPUT
+          echo "state_key=state/${ENV}/${VM}/terraform.tfstate" >> $GITHUB_OUTPUT
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Terraform Init
+        working-directory: ${{ steps.vars.outputs.working_dir }}
+        env:
+          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+        run: |
+          terraform init \
+            -backend-config="endpoint=${MINIO_ENDPOINT}" \
+            -backend-config="bucket=terraform-state" \
+            -backend-config="key=${{ steps.vars.outputs.state_key }}" \
+            -backend-config="region=us-east-1" \
+            -backend-config="access_key=${MINIO_ACCESS_KEY}" \
+            -backend-config="secret_key=${MINIO_SECRET_KEY}" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="skip_requesting_account_id=true" \
+            -backend-config="force_path_style=true"
+
+      - name: Get VM IP
+        id: tfout
+        working-directory: ${{ steps.vars.outputs.working_dir }}
+        run: |
+          IP=$(terraform output -raw vm_ip)
+          echo "vm_ip=$IP" >> $GITHUB_OUTPUT
+
+      - name: Wait for SSH
+        run: |
+          TIMEOUT=${{ inputs.ssh_wait_timeout_seconds }}
+          ELAPSED=0
+          INTERVAL=10
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            if nc -z ${{ steps.tfout.outputs.vm_ip }} 22 2>/dev/null; then
+              echo "SSH is ready!"
+              exit 0
+            fi
+            echo "Waiting for SSH... ($ELAPSED/$TIMEOUT seconds)"
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          echo "::error:: SSH not ready after $TIMEOUT seconds"
+          exit 1
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          chmod 700 ~/.ssh
+
+      - name: Create Inventory
+        run: |
+          echo "[vm]" > inventory.ini
+          echo "${{ steps.tfout.outputs.vm_ip }} ansible_user=ansible ansible_ssh_private_key_file=$HOME/.ssh/id_rsa" >> inventory.ini
+
+      - name: Ansible Deploy
+        run: |
+          ANSIBLE_HOST_KEY_CHECKING=False \
+          ansible-playbook -i inventory.ini ${{ inputs.ansible_playbook_path }}
