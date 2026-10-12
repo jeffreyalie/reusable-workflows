@@ -1,0 +1,28 @@
+name: "Ansible Deploy (Real VM)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment (dev/prod)"
+        required: true
+
+      vm_name:
+        description: "VM name (e.g. dev01 / prod01)"
+        required: true
+
+jobs:
+  deploy:
+    uses: Infra/reusable-workflows/.gitea/workflows/reusable-ansible-deploy.yml@main
+    with:
+      environment: ${{ github.event.inputs.environment }}
+      vm_name: ${{ github.event.inputs.vm_name }}
+      ansible_playbook_path: "ansible/playbook.yml"
+    secrets:
+      MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+      MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+      MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+      LXD_ADDRESS: ${{ secrets.LXD_ADDRESS }}
+      ANSIBLE_SSH_PUBLIC_KEY: ${{ secrets.ANSIBLE_SSH_PUBLIC_KEY }}
+      ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
+          

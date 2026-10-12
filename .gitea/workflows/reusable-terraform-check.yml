@@ -1,0 +1,45 @@
+name: "Reusable Terraform Check"
+
+on:
+  workflow_call:
+    inputs:
+      terraform_dir:
+        description: "Directory containing Terraform files (default: terraform)"
+        required: false
+        type: string
+        default: "terraform"
+      terraform_version:
+        description: "Optional Terraform version (defaults to latest)"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.terraform_dir }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -diff
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v3
+
+      - name: Run TFLint
+        run: tflint -f compact
