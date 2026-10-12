@@ -24,13 +24,16 @@ jobs:
       vm_name: ${{ github.event.inputs.vm_name }}
       confirm_destroy: ${{ github.event.inputs.confirm_destroy }}
     secrets:
-      MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
-      MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
-      MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+      # MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+      # MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+      # MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
       LXD_ADDRESS: ${{ secrets.LXD_ADDRESS }}
       ANSIBLE_SSH_PUBLIC_KEY: ${{ secrets.ANSIBLE_SSH_PUBLIC_KEY }}
       # LXD_TRUST_PASSWORD: ${{ secrets.LXD_TRUST_PASSWORD }} # -- enable if using password-based trust instead of client certs
       LXD_CLIENT_CERT: ${{ secrets.LXD_CLIENT_CERT }} # -- disable if using password-based trust instead of client certs
       LXD_CLIENT_KEY: ${{ secrets.LXD_CLIENT_KEY }} # -- disable if using password-based trust instead of client certs
+      AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_KEY }}
+      AWS_DEFAULT_REGION: us-east-1
             
             
