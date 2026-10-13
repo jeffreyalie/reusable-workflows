@@ -27,12 +27,16 @@ on:
         type: number
         default: 200
     secrets:
-      MINIO_ENDPOINT:
-        required: true
-      MINIO_ACCESS_KEY:
-        required: true
-      MINIO_SECRET_KEY:
-        required: true
+      # MINIO_ENDPOINT:
+      #   required: true
+      # MINIO_ACCESS_KEY:
+      #   required: true
+      # MINIO_SECRET_KEY:
+      #   required: true
+      AWS_ACCESS_KEY_ID:
+          required: true
+      AWS_SECRET_ACCESS_KEY:
+          required: true
       LXD_ADDRESS:
         required: true
       ANSIBLE_SSH_PUBLIC_KEY:
@@ -85,24 +89,33 @@ jobs:
         with:
           terraform_version: ${{ inputs.terraform_version }}
 
+      # -------------------------------------------------------------------
+      # Init (S3 backend on SeaweedFS)
+      # Non-secret settings go in a generated backend.hcl file. The access and
+      # secret keys come from the job-level AWS_* environment variables.
+      # -------------------------------------------------------------------
       - name: Terraform Init
         working-directory: ${{ steps.vars.outputs.working_dir }}
         env:
-          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
-          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
-          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
         run: |
-          terraform init \
-            -backend-config="endpoint=${MINIO_ENDPOINT}" \
-            -backend-config="bucket=terraform-state" \
-            -backend-config="key=${{ steps.vars.outputs.state_key }}" \
-            -backend-config="region=us-east-1" \
-            -backend-config="access_key=${MINIO_ACCESS_KEY}" \
-            -backend-config="secret_key=${MINIO_SECRET_KEY}" \
-            -backend-config="skip_credentials_validation=true" \
-            -backend-config="skip_metadata_api_check=true" \
-            -backend-config="skip_requesting_account_id=true" \
-            -backend-config="force_path_style=true"
+          cat > backend.hcl <<EOF
+          bucket = "tfstate"
+          key    = "${{ steps.vars.outputs.state_key }}"
+          region = "us-east-1"
+
+          endpoints = { s3 = "${S3_ENDPOINT}" }
+
+          use_path_style              = true
+          use_lockfile                = true
+          skip_credentials_validation = true
+          skip_requesting_account_id  = true
+          skip_metadata_api_check     = true
+          skip_region_validation      = true
+          skip_s3_checksum            = true
+          EOF
+
+          terraform init -backend-config=backend.hcl
 
       - name: Get VM IP
         id: tfout
