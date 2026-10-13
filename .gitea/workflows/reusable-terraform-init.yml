@@ -30,6 +30,8 @@ on:
           required: true
       AWS_SECRET_ACCESS_KEY:
           required: true
+      AWS_DEFAULT_REGION:
+          required: true
 
 jobs:
   init:
